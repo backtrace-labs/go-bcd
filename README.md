@@ -1,6 +1,6 @@
 # bcd
 --
-    import "."
+    import "github.com/backtrace-labs/go-bcd"
 
 Package bcd provides integration with out of process tracers. Using the provided
 Tracer interface, applications may invoke tracer execution on demand. Panic and
