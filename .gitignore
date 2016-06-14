@@ -1,0 +1,6 @@
+*.o
+*.out
+*.swp
+*.btt                                                                           
+*.kdev4
+examples/main

@@ -111,8 +111,7 @@ func New(includeSystemGs bool) *BTTracer {
 			syscall.SIGBUS,
 			syscall.SIGINT},
 		logger: &defaultLogger{
-			logger: log.New(os.Stderr, "[bcd] ",
-				log.Lshortfile|log.LstdFlags),
+			logger: log.New(os.Stderr, "[bcd] ", log.LstdFlags),
 			level: LogError},
 		defaultTraceOptions: TraceOptions{
 			Faulted:           true,
