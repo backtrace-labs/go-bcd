@@ -63,8 +63,8 @@ func init() {
 	state = globalState{
 		c: GlobalConfig{
 			PanicOnKillFailure: true,
-			ResendSignal: false,
-			RateLimit: time.Second * 3}}
+			ResendSignal:       false,
+			RateLimit:          time.Second * 3}}
 }
 
 // Update global Tracer configuration.
@@ -220,8 +220,8 @@ func (s *signalError) Error() string {
 func Register(t TracerSig) {
 	ss := t.Sigset()
 	if ss == nil || len(ss) == 0 {
-		t.Logf(LogError, "Failed to register signal handler: empty " +
-		    "sigset\n")
+		t.Logf(LogError, "Failed to register signal handler: empty "+
+			"sigset\n")
 		return
 	}
 
@@ -257,7 +257,7 @@ func Register(t TracerSig) {
 			signal.Reset(s)
 			p, err := os.FindProcess(os.Getpid())
 			if err != nil {
-				t.Logf(LogError, "Failed to resend signal: " +
+				t.Logf(LogError, "Failed to resend signal: "+
 					"cannot find process object")
 				return
 			}
@@ -368,7 +368,7 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 		options = t.AddKV(options, "error", e.Error())
 		if traceOptions.ErrClassification {
 			options = t.AddClassifier(options,
-			    reflect.TypeOf(e).String())
+				reflect.TypeOf(e).String())
 		}
 	}
 
@@ -414,8 +414,8 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 					err)
 				if kfPanic {
 					t.Logf(LogWarning,
-						"PanicOnKillFailure set; " +
-						"panicking\n")
+						"PanicOnKillFailure set; "+
+							"panicking\n")
 					panic(err)
 				}
 			}

@@ -13,7 +13,7 @@ import (
 )
 
 type pipes struct {
-	stdin io.Reader
+	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
 }
@@ -52,7 +52,7 @@ type BTTracer struct {
 
 type defaultLogger struct {
 	logger *log.Logger
-	level LogPriority
+	level  LogPriority
 }
 
 func (d *defaultLogger) Logf(level LogPriority, format string, v ...interface{}) {
@@ -95,9 +95,9 @@ func New(includeSystemGs bool) *BTTracer {
 	}
 
 	return &BTTracer{
-		path:    "/opt/backtrace/bin/ptrace",
-		kvp:     "--kv",
-		kvd:     ":",
+		path: "/opt/backtrace/bin/ptrace",
+		kvp:  "--kv",
+		kvd:  ":",
 		options: []string{
 			"--load=",
 			moduleOpt,
@@ -112,13 +112,13 @@ func New(includeSystemGs bool) *BTTracer {
 			syscall.SIGINT},
 		logger: &defaultLogger{
 			logger: log.New(os.Stderr, "[bcd] ",
-				log.Lshortfile | log.LstdFlags),
+				log.Lshortfile|log.LstdFlags),
 			level: LogError},
 		defaultTraceOptions: TraceOptions{
-			Faulted: true,
-			CallerOnly: false,
+			Faulted:           true,
+			CallerOnly:        false,
 			ErrClassification: true,
-			Timeout: time.Second * 120}}
+			Timeout:           time.Second * 120}}
 }
 
 // Sets the executable path for the tracer.
@@ -159,7 +159,7 @@ func (t *BTTracer) AddOptions(options []string, v ...string) []string {
 
 // See bcd.Tracer.AddKV().
 func (t *BTTracer) AddKV(options []string, key, val string) []string {
-	return t.AddOptions(options, t.kvp, key + t.kvd + val)
+	return t.AddOptions(options, t.kvp, key+t.kvd+val)
 }
 
 // See bcd.Tracer.AddThreadFilter().
