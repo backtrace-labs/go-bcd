@@ -24,8 +24,7 @@ var (
 func pan() {
 	defer bcd.Recover(tracer, false, nil)
 
-	err := errors.New("panic error")
-	panic(err)
+	panic("panic error")
 }
 
 func sig() {
