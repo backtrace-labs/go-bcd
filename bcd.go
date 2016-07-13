@@ -17,8 +17,6 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	sys "golang.org/x/sys/unix"
 )
 
 var (
@@ -143,10 +141,16 @@ type Tracer interface {
 type TraceOptions struct {
 	// If true, the calling thread/goroutine will be marked as faulted
 	// (i.e. the cause of the error or trace request).
+	//
+	// This is a Linux-specific option; it results in a noop on other
+	// systems.
 	Faulted bool
 
 	// If true, only the calling thread/goroutine will be traced; all others
 	// will be excluded from the generated snapshot.
+	//
+	// This is a Linux-specific option; it results in a noop on other
+	// systems.
 	CallerOnly bool
 
 	// If true and a non-nil error object is passed to bcd.Trace(), a
@@ -344,7 +348,7 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 	// We create a new options slice to avoid modifying the base
 	// set of tracer options just for this particular trace
 	// invocation.
-	options := append([]string(nil), t.Options()...)
+	options := t.Options()
 
 	// If the caller has requested a trace with thread-specific options,
 	// then add the relevant thread specifications to the options list.
@@ -352,15 +356,18 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
-		tid := sys.Gettid()
-		t.Logf(LogDebug, "Retrieved tid: %v\n", tid)
+		if tid, err := gettid(); err == nil {
+			t.Logf(LogDebug, "Retrieved tid: %v\n", tid)
 
-		if traceOptions.CallerOnly {
-			options = t.AddThreadFilter(options, tid)
-		}
+			if traceOptions.CallerOnly {
+				options = t.AddThreadFilter(options, tid)
+			}
 
-		if traceOptions.Faulted {
-			options = t.AddFaultedThread(options, tid)
+			if traceOptions.Faulted {
+				options = t.AddFaultedThread(options, tid)
+			}
+		} else {
+			t.Logf(LogWarning, "Failed to retrieve tid: %v\n", err);
 		}
 	}
 
@@ -458,15 +465,4 @@ func Recover(t Tracer, repanic bool, options *TraceOptions) {
 			panic(r)
 		}
 	}
-}
-
-// Call this function to allow other (non-parent) processes to trace this one.
-// Alternatively, set kernel.yama.ptrace_scope = 0 in
-// /etc/sysctl.d/10-ptrace.conf.
-func EnableTracing() error {
-	// PR_SET_PTRACER_ANY may be a negative integer constant on some
-	// systems, so we need to store it in a separate variable to bypass
-	// Go's const conversion restrictions.
-	flag := sys.PR_SET_PTRACER_ANY
-	return sys.Prctl(sys.PR_SET_PTRACER, uintptr(flag), 0, 0, 0)
 }

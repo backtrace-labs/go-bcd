@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	sys "golang.org/x/sys/unix"
 )
 
 type TestTracer struct {
@@ -180,15 +178,16 @@ func TestTrace(t *testing.T) {
 		t.Fatal("Failed to execute tracer successfully")
 	}
 
-	tid := strconv.Itoa(sys.Gettid())
-
 	expectedSet := map[string]bool{
 		"error:"+err.Error(): false,
 		"*errors.errorString": false,
 		"classifier1": false,
-		"classifier2": false,
-		"fault:"+tid: false,
-		"filter:"+tid: false}
+		"classifier2": false}
+
+	if tid, err := gettid(); err == nil {
+		expectedSet["fault:"+strconv.Itoa(tid)] = false
+		expectedSet["filter:"+strconv.Itoa(tid)] = false
+	}
 
 	opns := tracer.Options()
 	for _, s := range opns {

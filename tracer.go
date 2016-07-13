@@ -1,3 +1,5 @@
+// +build linux freebsd
+
 package bcd
 
 import (
@@ -67,7 +69,9 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 	d.level = level
 }
 
-// Returns a new object implementing the bcd.Tracer and bcd.TracerSig interfaces.
+// Returns a new object implementing the bcd.Tracer and bcd.TracerSig interfaces
+// using the Backtrace debugging platform. Currently, only Linux and FreeBSD
+// are supported.
 //
 // Relevant default values:
 //
@@ -83,10 +87,10 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 //
 // The default logger prints to stderr.
 //
-// DefaultTraceOptions:
-// Faulted: true
-// CallerOnly: false
-// ErrClassification: true
+// DefaultTraceOptions:  
+// Faulted: true  
+// CallerOnly: false  
+// ErrClassification: true  
 // Timeout: 120s
 func New(includeSystemGs bool) *BTTracer {
 	moduleOpt := "--module=go:enable,true"
