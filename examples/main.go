@@ -83,9 +83,9 @@ func recurse(depth int, s1 fishface) {
 
 	_, _, _, _, _, _, _, _, _, _, _, _ = a, b, c, d, e, f, g, h, i, k, l, m
 
+	wg.Add(1)
 	go func() {
 		fmt.Println("Requesting trace...")
-		wg.Add(1)
 
 		err := errors.New("trace-request")
 
@@ -105,13 +105,12 @@ func recurse(depth int, s1 fishface) {
 			fmt.Println("Failed to trace: %v", traceErr)
 		}
 
-		wg.Done()
 		fmt.Println("Done")
+		wg.Done()
 	}()
 
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
-
 		f, err := os.Create("/tmp/dat1")
 		if (err != nil) {
 			panic(err)
@@ -148,6 +147,7 @@ func recurse(depth int, s1 fishface) {
 			}
 		}
 
+		fmt.Println("Done")
 		wg.Done()
 	}()
 
@@ -177,16 +177,20 @@ func main() {
 	tracer.AddKV(nil, "version", "1.2.3")
 
 	// Tracer I/O is directed to os.DevNull by default.
-	// Note: this does not effect the generated output file (unless the
+	// Note: this does not affect the generated output file (unless the
 	// tracer can only print to stdout/err).
 	f, err := os.Create("./tracelog")
 	if (err != nil) {
 		panic(err)
 	}
 	defer f.Close()
-	tracer.SetPipes(nil, f, f)
+	tracer.SetPipes(nil, f)
 
-	tracer.SetLogLevel(bcd.LogDebug)
+	tracer.SetLogLevel(bcd.LogMax)
+
+	tracer.EnablePut("fakehost.fakecompany.io",
+		"faketoken"
+		bcd.PutOptions{Unlink: true})
 
 	// Register for signal handling using the tracer's default signal set.
 	bcd.Register(tracer)

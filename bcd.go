@@ -51,6 +51,10 @@ type GlobalConfig struct {
 	// execution before allowing the next tracer to run.
 	// Defaults to 3 seconds.
 	RateLimit time.Duration
+
+	// XXX
+	// Defaults to false.
+	SynchronousPut bool
 }
 
 func init() {
@@ -58,11 +62,13 @@ func init() {
 	// channel here instead of sync.Mutex.
 	traceLock = make(chan struct{}, 1)
 	traceLock <- struct{}{}
+
 	state = globalState{
 		c: GlobalConfig{
 			PanicOnKillFailure: true,
 			ResendSignal:       false,
-			RateLimit:          time.Second * 3}}
+			RateLimit:          time.Second * 3,
+			SynchronousPut:     true}}
 }
 
 // Update global Tracer configuration.
@@ -135,6 +141,12 @@ type Tracer interface {
 
 	// String representation of a Tracer.
 	fmt.Stringer
+
+	// XXX
+	PutEnabled() bool
+
+	// XXX
+	Put(snapshot []byte) error
 }
 
 // Options determining actions taken during Tracer execution.
@@ -166,6 +178,9 @@ type TraceOptions struct {
 	// used. If <0 is specified, no timeout will be used; the Tracer command
 	// will run until it exits.
 	Timeout time.Duration
+
+	// XXX
+	// Waitgroup
 }
 
 type Log interface {
@@ -304,6 +319,11 @@ func traceUnlockRL(t Tracer, rl time.Duration) {
 	traceLock <- struct{}{}
 }
 
+type tracerResult struct {
+	stdOut []byte
+	err error
+}
+
 // Executes the specified Tracer on the current process.
 //
 // If e is non-nil, it will be used to augment the trace according to the
@@ -386,54 +406,102 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 	state.m.RLock()
 	kfPanic := state.c.PanicOnKillFailure
 	rl := state.c.RateLimit
+	synchronousPut := state.c.SynchronousPut
 	state.m.RUnlock()
 
 	select {
 	case <-timeout:
-		errS := "Tracer lock acquisition timed out"
-		t.Logf(LogError, "%v\n", errS)
-		err = errors.New(errS)
+		err = errors.New("Tracer lock acquisition timed out")
+		t.Logf(LogError, "%v\n", err)
+		return
 	case <-traceLock:
-		// Allow another tracer to execute (i.e. by re-populating the
-		// traceLock channel) as long as the current tracer has
-		// exited.
-		defer func() {
-			go traceUnlockRL(t, rl)
-		}()
+		break
+	}
 
-		done := make(chan error, 1)
-		tracer := t.Finalize(options)
+	// We now hold the trace lock.
+	// Allow another tracer to execute (i.e. by re-populating the
+	// traceLock channel) as long as the current tracer has
+	// exited.
+	defer func() {
+		go traceUnlockRL(t, rl)
+	}()
 
-		go func() {
-			t.Logf(LogDebug, "Starting tracer %v\n", tracer)
-			if err := tracer.Start(); err != nil {
-				done <- err
-			}
-			done <- tracer.Wait()
-		}()
+	done := make(chan tracerResult, 1)
+	tracer := t.Finalize(options)
 
-		select {
-		case <-timeout:
-			errS := "Tracer execution timed out"
-			t.Logf(LogError, "%v\n", errS)
-			if err = tracer.Process.Kill(); err != nil {
-				t.Logf(LogError, "Failed to kill tracer: %v\n",
-					err)
-				if kfPanic {
-					t.Logf(LogWarning,
-						"PanicOnKillFailure set; "+
-							"panicking\n")
-					panic(err)
-				}
-			}
-			err = errors.New(errS)
-		case err = <-done:
-			if err != nil {
-				t.Logf(LogError, "Tracer failed to run: %v\n",
-					err)
+	go func() {
+		t.Logf(LogDebug, "Starting tracer %v\n", tracer)
+
+		var res tracerResult
+
+		res.stdOut, res.err = tracer.Output()
+		done <- res
+
+		t.Logf(LogDebug, "Tracer finished execution\n")
+	}()
+
+	t.Logf(LogDebug, "Waiting for tracer completion...\n")
+
+	var res tracerResult
+
+	select {
+	case <-timeout:
+		if err = tracer.Process.Kill(); err != nil {
+			t.Logf(LogError,
+				"Failed to kill tracer upon timeout: %v\n",
+				err)
+
+			if kfPanic {
+				t.Logf(LogWarning,
+					"PanicOnKillFailure set; "+
+						"panicking\n")
+				panic(err)
 			}
 		}
+
+		err = errors.New("Tracer execution timed out")
+		t.Logf(LogError, "%v; process killed\n", err)
+
+		return
+	case res = <-done:
+		break
 	}
+
+	// Tracer execution has completed by this point.
+	if res.err != nil {
+		t.Logf(LogError, "Tracer failed to run: %v\n",
+			res.err)
+		err = res.err
+		return
+	}
+
+	if t.PutEnabled() == false {
+		return
+	}
+
+	putFn := func() error {
+		t.Logf(LogDebug, "Uploading snapshot...")
+
+		if err := t.Put(res.stdOut); err != nil {
+			t.Logf(LogError, "Failed to upload snapshot: %s",
+				err)
+
+			return err
+		}
+
+		t.Logf(LogDebug, "Successfully uploaded snapshot\n")
+
+		return nil
+	}
+
+	if synchronousPut {
+		err = putFn()
+	} else {
+		t.Logf(LogDebug, "Starting asynchronous put...\n")
+		go putFn()
+	}
+
+	t.Logf(LogDebug, "Trace request complete\n")
 
 	return
 }

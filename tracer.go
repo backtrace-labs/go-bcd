@@ -1,14 +1,19 @@
 // +build linux freebsd
 
+
 package bcd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -16,8 +21,13 @@ import (
 
 type pipes struct {
 	stdin  io.Reader
-	stdout io.Writer
 	stderr io.Writer
+}
+
+type connection struct {
+	endpoint string
+	client http.Client
+	unlink bool
 }
 
 type BTTracer struct {
@@ -50,6 +60,9 @@ type BTTracer struct {
 
 	// Default trace options to use if none are specified to bcd.Trace().
 	defaultTraceOptions TraceOptions
+
+	// XXX
+	uploader connection
 }
 
 type defaultLogger struct {
@@ -124,6 +137,101 @@ func New(includeSystemGs bool) *BTTracer {
 			Timeout:           time.Second * 120}}
 }
 
+type PutOptions struct {
+	// XXX
+	Protocol string
+
+	// XXX
+	Port uint
+
+	// XXX
+	Unlink bool
+}
+
+// XXX
+func (t *BTTracer) EnablePut(host, token string, options PutOptions) error {
+	if host == "" || token == "" {
+		return errors.New("Host and token must be non-empty")
+	}
+
+	if options.Protocol == "" {
+		options.Protocol = "https"
+	}
+
+	if options.Port == 0 {
+		options.Port = 6098
+	}
+
+	t.uploader.endpoint = fmt.Sprintf("%s://%s:%d/post?token=%s",
+		options.Protocol,
+		host,
+		options.Port,
+		token);
+	t.uploader.unlink = options.Unlink
+
+	t.Logf(LogDebug, "Put enabled (endpoint: %s, unlink: %v)\n",
+		t.uploader.endpoint,
+		t.uploader.unlink)
+
+	return nil
+}
+
+// XXX
+func (t *BTTracer) PutEnabled() bool {
+	return t.uploader.endpoint != ""
+}
+
+// XXX
+func (t *BTTracer) Put(snapshot []byte) error {
+	end := bytes.IndexByte(snapshot, 0)
+	if end == -1 {
+		end = len(snapshot)
+	}
+	path := strings.TrimSpace(string(snapshot[:end]))
+
+	t.Logf(LogDebug, "Attempting to upload snapshot %s...\n", path)
+
+	body, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+
+	// The file is automatically closed by the Post request after
+	// completion.
+
+	resp, err := t.uploader.client.Post(
+		t.uploader.endpoint,
+		"application/octet-stream",
+		body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("failed to upload: %s", resp.Status)
+	}
+
+	if t.uploader.unlink {
+		t.Logf(LogDebug, "Unlinking snapshot...\n")
+
+		if err := os.Remove(path); err != nil {
+			t.Logf(LogWarning,
+				"Failed to unlink snapshot: %v\n",
+				err)
+
+			// This does not mean the put itself failed,
+			// so we don't return this error here.
+		} else {
+			t.Logf(LogDebug, "Unlinked snapshot\n")
+		}
+	}
+
+	t.Logf(LogDebug, "Uploaded snapshot\n")
+
+	return nil
+}
+
 // Sets the executable path for the tracer.
 func (t *BTTracer) SetPath(path string) {
 	t.m.Lock()
@@ -132,13 +240,17 @@ func (t *BTTracer) SetPath(path string) {
 	t.path = path
 }
 
+// XXX SetPath -> SetTracerPath
+// XXX SetOutputPath(path string)
+
 // Sets the input and output pipes for the tracer.
-func (t *BTTracer) SetPipes(stdin io.Reader, stdout, stderr io.Writer) {
+// Stdout is not redirected; it is instead passed to the
+// tracer's Put command.
+func (t *BTTracer) SetPipes(stdin io.Reader, stderr io.Writer) {
 	t.m.Lock()
 	defer t.m.Unlock()
 
 	t.p.stdin = stdin
-	t.p.stdout = stdout
 	t.p.stderr = stderr
 }
 
@@ -208,7 +320,6 @@ func (t *BTTracer) Finalize(options []string) *exec.Cmd {
 
 	tracer := exec.Command(t.path, options...)
 	tracer.Stdin = t.p.stdin
-	tracer.Stdout = t.p.stdout
 	tracer.Stderr = t.p.stderr
 
 	t.Logf(LogDebug, "Command: %v\n", tracer)

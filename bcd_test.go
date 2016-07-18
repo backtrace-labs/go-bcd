@@ -71,6 +71,14 @@ func (t *TestTracer) Finalize(options []string) *exec.Cmd {
 	return t.tracer
 }
 
+func (t *TestTracer) Put(snapshot []byte) error {
+	return nil
+}
+
+func (t *TestTracer) PutEnabled() bool {
+	return false
+}
+
 func (t *TestTracer) Logf(level LogPriority, format string, v ...interface{}) {
 }
 
