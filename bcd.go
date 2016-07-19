@@ -1,8 +1,8 @@
-// Package bcd provides integration with out of process tracers. Using the
+// Package bcd provides integration with out-of-process tracers. Using the
 // provided Tracer interface, applications may invoke tracer execution on
 // demand. Panic and signal handling integrations are provided.
 //
-// The Tracer interface is generic and will support any out of process tracer
+// The Tracer interface is generic and will support any out-of-process tracer
 // implementing it. A default Tracer implementation, which uses the
 // Backtrace I/O platform, is provided.
 package bcd
@@ -81,7 +81,7 @@ func UpdateConfig(c *GlobalConfig) {
 	state.c = *c
 }
 
-// A generic out of process tracer interface.
+// A generic out-of-process tracer interface.
 // The methods in this interface are expected to be goroutine safe; multiple
 // trace requests (which ultimately call into these methods) from different
 // goroutines may run concurrently.
