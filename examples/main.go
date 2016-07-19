@@ -20,7 +20,7 @@ const (
 
 var (
 	tracer *bcd.BTTracer
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
 )
 
 func pan() {
@@ -76,8 +76,8 @@ func recurse(depth int, s1 fishface) {
 	}
 	e := map[string]int{"a": 10, "b": 5}
 	l := map[sarlmons]string{
-		sarlmons{3, 4, 5, "fish"}: "what",
-		sarlmons{4, 5, 6, "fush"}: "the",
+		sarlmons{3, 4, 5, "fish"}:     "what",
+		sarlmons{4, 5, 6, "fush"}:     "the",
 		sarlmons{5, 6, 7, "fisheded"}: "chicken",
 	}
 
@@ -96,8 +96,8 @@ func recurse(depth int, s1 fishface) {
 			// Faulted and CallerOnly options don't make sense
 			// for asynchronous trace requests. See below for a
 			// synchronous request.
-			Faulted: false,
-			CallerOnly: false,
+			Faulted:           false,
+			CallerOnly:        false,
 			ErrClassification: true,
 			Classifications: []string{
 				"these", "are", "test", "classifiers"}})
@@ -112,7 +112,7 @@ func recurse(depth int, s1 fishface) {
 	wg.Add(1)
 	go func() {
 		f, err := os.Create("/tmp/dat1")
-		if (err != nil) {
+		if err != nil {
 			panic(err)
 		}
 		defer f.Close()
@@ -134,9 +134,9 @@ func recurse(depth int, s1 fishface) {
 				if err != nil {
 					fmt.Println("Requesting trace")
 					bcd.Trace(tracer, err, &bcd.TraceOptions{
-						Faulted: true,
-						CallerOnly: true,
-						Timeout: time.Second * 30,
+						Faulted:           true,
+						CallerOnly:        true,
+						Timeout:           time.Second * 30,
 						ErrClassification: true})
 					break
 				}
@@ -151,7 +151,7 @@ func recurse(depth int, s1 fishface) {
 		wg.Done()
 	}()
 
-	recurse(depth - 1, s1)
+	recurse(depth-1, s1)
 }
 
 func start() {
@@ -180,7 +180,7 @@ func main() {
 	// Note: this does not affect the generated output file (unless the
 	// tracer can only print to stdout/err).
 	f, err := os.Create("./tracelog")
-	if (err != nil) {
+	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
@@ -188,9 +188,11 @@ func main() {
 
 	tracer.SetLogLevel(bcd.LogMax)
 
-	tracer.EnablePut("fakehost.fakecompany.io",
-		"faketoken"
-		bcd.PutOptions{Unlink: true})
+	if err := tracer.EnablePut("fakeserver",
+		"faketoken",
+		bcd.PutOptions{Unlink: true}); err != nil {
+		fmt.Printf("Failed to enable put: %v\n", err)
+	}
 
 	// Register for signal handling using the tracer's default signal set.
 	bcd.Register(tracer)
@@ -202,20 +204,20 @@ func main() {
 
 type sarlmons struct {
 	a, b, c int
-	d string
+	d       string
 }
 
 type fish map[sarlmons]string
 
 type moop struct {
 	a, b, c int
-	d string
-	e, f map[string]int
+	d       string
+	e, f    map[string]int
 }
 
 type fntest struct {
 	a, b int
-	f func(a, b int) int
+	f    func(a, b int) int
 }
 
 func intfn(a, b int) int {

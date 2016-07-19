@@ -1,6 +1,5 @@
 // +build linux freebsd
 
-
 package bcd
 
 import (
@@ -10,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -24,15 +24,15 @@ type pipes struct {
 	stderr io.Writer
 }
 
-type connection struct {
+type uploader struct {
 	endpoint string
-	client http.Client
-	unlink bool
+	client   http.Client
+	options  PutOptions
 }
 
 type BTTracer struct {
 	// Path to the tracer to invoke.
-	path string
+	cmd string
 
 	// Generic options to pass to the tracer.
 	options []string
@@ -61,8 +61,8 @@ type BTTracer struct {
 	// Default trace options to use if none are specified to bcd.Trace().
 	defaultTraceOptions TraceOptions
 
-	// XXX
-	uploader connection
+	// The connection information and options used during Put operations.
+	put uploader
 }
 
 type defaultLogger struct {
@@ -100,10 +100,14 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 //
 // The default logger prints to stderr.
 //
-// DefaultTraceOptions:  
-// Faulted: true  
-// CallerOnly: false  
-// ErrClassification: true  
+// DefaultTraceOptions:
+//
+// Faulted: true
+//
+// CallerOnly: false
+//
+// ErrClassification: true
+//
 // Timeout: 120s
 func New(includeSystemGs bool) *BTTracer {
 	moduleOpt := "--module=go:enable,true"
@@ -112,9 +116,9 @@ func New(includeSystemGs bool) *BTTracer {
 	}
 
 	return &BTTracer{
-		path: "/opt/backtrace/bin/ptrace",
-		kvp:  "--kv",
-		kvd:  ":",
+		cmd: "/opt/backtrace/bin/ptrace",
+		kvp: "--kv",
+		kvd: ":",
 		options: []string{
 			"--load=",
 			moduleOpt,
@@ -129,7 +133,7 @@ func New(includeSystemGs bool) *BTTracer {
 			syscall.SIGINT},
 		logger: &defaultLogger{
 			logger: log.New(os.Stderr, "[bcd] ", log.LstdFlags),
-			level: LogError},
+			level:  LogError},
 		defaultTraceOptions: TraceOptions{
 			Faulted:           true,
 			CallerOnly:        false,
@@ -137,51 +141,82 @@ func New(includeSystemGs bool) *BTTracer {
 			Timeout:           time.Second * 120}}
 }
 
+const (
+	defaultCoronerScheme = "https"
+	defaultCoronerPort   = "6098"
+)
+
 type PutOptions struct {
-	// XXX
-	Protocol string
-
-	// XXX
-	Port uint
-
-	// XXX
+	// Set to true if tracer remnants (i.e. generated snapshot files)
+	// should be unlinked from the filesystem after successful puts.
 	Unlink bool
 }
 
-// XXX
-func (t *BTTracer) EnablePut(host, token string, options PutOptions) error {
-	if host == "" || token == "" {
-		return errors.New("Host and token must be non-empty")
+// Enables uploading of the generated snapshot file to a remote Backtrace
+// coronerd object store.
+//
+// endpoint: The URL of the server. It must be a valid HTTP endpoint as
+// according to url.Parse() (which is based on RFC 3986). The default scheme
+// and port are https and 6098, respectively, and are used if left unspecified.
+//
+// token: The hash associated with the coronerd project to which this
+// application belongs; see
+// https://documentation.backtrace.io/coronerd_setup/#authentication-tokens
+// for more details.
+//
+// options: Modifies behavior of the Put action; see PutOptions documentation
+// for more details.
+func (t *BTTracer) EnablePut(endpoint, token string, options PutOptions) error {
+	if endpoint == "" || token == "" {
+		return errors.New("Endpoint must be non-empty")
 	}
 
-	if options.Protocol == "" {
-		options.Protocol = "https"
+	url, err := url.Parse(endpoint)
+	if err != nil {
+		return err
 	}
 
-	if options.Port == 0 {
-		options.Port = 6098
+	// Endpoints without the scheme prefix (or at the very least a '//`
+	// prefix) are interpreted as remote server paths. Handle the
+	// (unlikely) case of an unspecified scheme. We won't allow other
+	// cases, like a port specified without a scheme, though, as per
+	// RFC 3986.
+	if url.Host == "" {
+		if url.Path == "" {
+			return errors.New("invalid URL specification: host " +
+				"or path must be non-empty")
+		}
+
+		url.Host = url.Path
 	}
 
-	t.uploader.endpoint = fmt.Sprintf("%s://%s:%d/post?token=%s",
-		options.Protocol,
-		host,
-		options.Port,
-		token);
-	t.uploader.unlink = options.Unlink
+	if url.Scheme == "" {
+		url.Scheme = defaultCoronerScheme
+	}
+
+	if strings.IndexAny(url.Host, ":") == -1 {
+		url.Host += ":" + defaultCoronerPort
+	}
+
+	url.Path = "post"
+	url.RawQuery = fmt.Sprintf("token=%s", token)
+
+	t.put.endpoint = url.String()
+	t.put.options = options
 
 	t.Logf(LogDebug, "Put enabled (endpoint: %s, unlink: %v)\n",
-		t.uploader.endpoint,
-		t.uploader.unlink)
+		t.put.endpoint,
+		t.put.options.Unlink)
 
 	return nil
 }
 
-// XXX
+// See bcd.Tracer.PutEnabled().
 func (t *BTTracer) PutEnabled() bool {
-	return t.uploader.endpoint != ""
+	return t.put.endpoint != ""
 }
 
-// XXX
+// See bcd.Tracer.Put().
 func (t *BTTracer) Put(snapshot []byte) error {
 	end := bytes.IndexByte(snapshot, 0)
 	if end == -1 {
@@ -199,8 +234,8 @@ func (t *BTTracer) Put(snapshot []byte) error {
 	// The file is automatically closed by the Post request after
 	// completion.
 
-	resp, err := t.uploader.client.Post(
-		t.uploader.endpoint,
+	resp, err := t.put.client.Post(
+		t.put.endpoint,
 		"application/octet-stream",
 		body)
 	if err != nil {
@@ -212,7 +247,7 @@ func (t *BTTracer) Put(snapshot []byte) error {
 		return fmt.Errorf("failed to upload: %s", resp.Status)
 	}
 
-	if t.uploader.unlink {
+	if t.put.options.Unlink {
 		t.Logf(LogDebug, "Unlinking snapshot...\n")
 
 		if err := os.Remove(path); err != nil {
@@ -233,15 +268,12 @@ func (t *BTTracer) Put(snapshot []byte) error {
 }
 
 // Sets the executable path for the tracer.
-func (t *BTTracer) SetPath(path string) {
+func (t *BTTracer) SetTracerPath(path string) {
 	t.m.Lock()
 	defer t.m.Unlock()
 
-	t.path = path
+	t.cmd = path
 }
-
-// XXX SetPath -> SetTracerPath
-// XXX SetOutputPath(path string)
 
 // Sets the input and output pipes for the tracer.
 // Stdout is not redirected; it is instead passed to the
@@ -318,7 +350,7 @@ func (t *BTTracer) Finalize(options []string) *exec.Cmd {
 	t.m.RLock()
 	defer t.m.RUnlock()
 
-	tracer := exec.Command(t.path, options...)
+	tracer := exec.Command(t.cmd, options...)
 	tracer.Stdin = t.p.stdin
 	tracer.Stderr = t.p.stderr
 
@@ -345,7 +377,7 @@ func (t *BTTracer) String() string {
 	t.m.RLock()
 	defer t.m.RUnlock()
 
-	return fmt.Sprintf("Path: %s, Options: %v", t.path, t.options)
+	return fmt.Sprintf("Command: %s, Options: %v", t.cmd, t.options)
 }
 
 // See bcd.TracerSig.SetSigset().

@@ -52,8 +52,10 @@ type GlobalConfig struct {
 	// Defaults to 3 seconds.
 	RateLimit time.Duration
 
-	// XXX
-	// Defaults to false.
+	// Wait for the Tracer to finish uploading its results (instead of
+	// asynchronously uploading in a new goroutine) before returning
+	// from bcd.Trace().
+	// Defaults to true.
 	SynchronousPut bool
 }
 
@@ -142,10 +144,12 @@ type Tracer interface {
 	// String representation of a Tracer.
 	fmt.Stringer
 
-	// XXX
+	// Returns whether the tracer should upload its results to a remote
+	// server after successful tracer execution.
 	PutEnabled() bool
 
-	// XXX
+	// Uploads Tracer results given by the snapshot argument, which is
+	// the stdout of the Tracer process, to the configured remote server.
 	Put(snapshot []byte) error
 }
 
@@ -178,9 +182,6 @@ type TraceOptions struct {
 	// used. If <0 is specified, no timeout will be used; the Tracer command
 	// will run until it exits.
 	Timeout time.Duration
-
-	// XXX
-	// Waitgroup
 }
 
 type Log interface {
@@ -321,7 +322,7 @@ func traceUnlockRL(t Tracer, rl time.Duration) {
 
 type tracerResult struct {
 	stdOut []byte
-	err error
+	err    error
 }
 
 // Executes the specified Tracer on the current process.
@@ -387,7 +388,7 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 				options = t.AddFaultedThread(options, tid)
 			}
 		} else {
-			t.Logf(LogWarning, "Failed to retrieve tid: %v\n", err);
+			t.Logf(LogWarning, "Failed to retrieve tid: %v\n", err)
 		}
 	}
 
