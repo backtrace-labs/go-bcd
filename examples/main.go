@@ -24,7 +24,11 @@ var (
 )
 
 func pan() {
-	defer bcd.Recover(tracer, false, nil)
+	defer bcd.Recover(tracer, false, &bcd.TraceOptions{
+		Faulted:           true,
+		CallerOnly:        true,
+		ErrClassification: true,
+		SpawnedGs: &wg})
 
 	panic("panic error")
 }
@@ -85,6 +89,8 @@ func recurse(depth int, s1 fishface) {
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		fmt.Println("Requesting trace...")
 
 		err := errors.New("trace-request")
@@ -106,11 +112,12 @@ func recurse(depth int, s1 fishface) {
 		}
 
 		fmt.Println("Done")
-		wg.Done()
 	}()
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		f, err := os.Create("/tmp/dat1")
 		if err != nil {
 			panic(err)
@@ -148,7 +155,6 @@ func recurse(depth int, s1 fishface) {
 		}
 
 		fmt.Println("Done")
-		wg.Done()
 	}()
 
 	recurse(depth-1, s1)
@@ -165,6 +171,12 @@ func main() {
 	if err := bcd.EnableTracing(); err != nil {
 		fmt.Printf("Warning: failed to enable tracing: %v\n", err)
 	}
+
+	bcd.UpdateConfig(bcd.GlobalConfig{
+		PanicOnKillFailure: true,
+		ResendSignal:       true,
+		RateLimit:          time.Second * 5,
+		SynchronousPut:     false})
 
 	// Use the default tracer implementation.
 	tracer = bcd.New(bcd.NewOptions{IncludeSystemGs: false})

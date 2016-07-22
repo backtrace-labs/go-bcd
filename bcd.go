@@ -74,11 +74,11 @@ func init() {
 }
 
 // Update global Tracer configuration.
-func UpdateConfig(c *GlobalConfig) {
+func UpdateConfig(c GlobalConfig) {
 	state.m.Lock()
 	defer state.m.Unlock()
 
-	state.c = *c
+	state.c = c
 }
 
 // A generic out-of-process tracer interface.
@@ -182,6 +182,12 @@ type TraceOptions struct {
 	// used. If <0 is specified, no timeout will be used; the Tracer command
 	// will run until it exits.
 	Timeout time.Duration
+
+	// If non-nil, any goroutines spawned during the Trace() request will
+	// be added to the wait group. This facilitates waiting for things like
+	// asynchronous snapshot uploads to complete before exiting the
+	// application.
+	SpawnedGs *sync.WaitGroup
 }
 
 type Log interface {
@@ -430,7 +436,15 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 	done := make(chan tracerResult, 1)
 	tracer := t.Finalize(options)
 
+	if traceOptions.SpawnedGs != nil {
+		traceOptions.SpawnedGs.Add(1)
+	}
+
 	go func() {
+		if traceOptions.SpawnedGs != nil {
+			defer traceOptions.SpawnedGs.Done()
+		}
+
 		t.Logf(LogDebug, "Starting tracer %v\n", tracer)
 
 		var res tracerResult
@@ -499,7 +513,18 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 		err = putFn()
 	} else {
 		t.Logf(LogDebug, "Starting asynchronous put...\n")
-		go putFn()
+
+		if traceOptions.SpawnedGs != nil {
+			traceOptions.SpawnedGs.Add(1)
+		}
+
+		go func() {
+			if traceOptions.SpawnedGs != nil {
+				defer traceOptions.SpawnedGs.Done()
+			}
+
+			putFn()
+		}()
 	}
 
 	t.Logf(LogDebug, "Trace request complete\n")

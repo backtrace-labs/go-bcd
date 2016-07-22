@@ -95,7 +95,7 @@ func TestConcurrentRateLimit(t *testing.T) {
 	var wg sync.WaitGroup
 	var rateLimit time.Duration = 3
 
-	UpdateConfig(&GlobalConfig{
+	UpdateConfig(GlobalConfig{
 		PanicOnKillFailure: true,
 		RateLimit: time.Second * rateLimit})
 
@@ -136,7 +136,7 @@ func TestConcurrentRateLimit(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	UpdateConfig(&GlobalConfig{RateLimit: 0})
+	UpdateConfig(GlobalConfig{RateLimit: 0})
 
 	tracer := &TestTracer{sleepDuration: 5}
 
