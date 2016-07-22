@@ -523,12 +523,16 @@ func (p *panicError) Error() string {
 // https://blog.golang.org/defer-panic-and-recover.
 func Recover(t Tracer, repanic bool, options *TraceOptions) {
 	if r := recover(); r != nil {
-		rt := reflect.TypeOf(r)
-		if rt.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			Trace(t, r.(error), options)
-		} else {
-			Trace(t, &panicError{r}, options)
+		err, ok := r.(error)
+		if !ok {
+			// We use the runtime type of the error object for
+			// classification (and thus potential grouping);
+			// *bcd.PanicError is a more descriptive classifier
+			// than something like *errors.errorString.
+			err = &panicError{r}
 		}
+
+		Trace(t, err, options)
 
 		if repanic {
 			panic(r)
