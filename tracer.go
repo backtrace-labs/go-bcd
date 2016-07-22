@@ -90,7 +90,7 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 //
 // Path: /opt/backtrace/bin/ptrace
 //
-// Signal set: ABRT, FPE, SEGV, ILL, BUS, INT. Note: Go converts BUS, FPE, and
+// Signal set: ABRT, FPE, SEGV, ILL, BUS. Note: Go converts BUS, FPE, and
 // SEGV arising from process execution into run-time panics, which cannot be
 // handled by signal handlers. These signals are caught went sent from
 // os.Process.Kill or similar.
