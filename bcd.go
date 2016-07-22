@@ -44,7 +44,7 @@ type GlobalConfig struct {
 	// listening for the signal.
 	// Note: this will call signal.Reset(signal) on the received signal,
 	// which undoes the effect of any signal.Notify() calls for the signal.
-	// Defaults to false.
+	// Defaults to true.
 	ResendSignal bool
 
 	// Length of time to wait after completion of a tracer's
@@ -68,7 +68,7 @@ func init() {
 	state = globalState{
 		c: GlobalConfig{
 			PanicOnKillFailure: true,
-			ResendSignal:       false,
+			ResendSignal:       true,
 			RateLimit:          time.Second * 3,
 			SynchronousPut:     true}}
 }
