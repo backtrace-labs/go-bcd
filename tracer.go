@@ -26,13 +26,15 @@ type pipes struct {
 
 type uploader struct {
 	endpoint string
-	client   http.Client
 	options  PutOptions
 }
 
 type BTTracer struct {
 	// Path to the tracer to invoke.
 	cmd string
+
+	// Output directory for generated snapshots.
+	outputDir string
 
 	// Generic options to pass to the tracer.
 	options []string
@@ -82,21 +84,26 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 	d.level = level
 }
 
+type NewOptions struct {
+	// If false, system goroutines (i.e. those started and used by the Go
+	// runtime) are excluded.
+	IncludeSystemGs bool
+}
+
 // Returns a new object implementing the bcd.Tracer and bcd.TracerSig interfaces
 // using the Backtrace debugging platform. Currently, only Linux and FreeBSD
 // are supported.
 //
 // Relevant default values:
 //
-// Path: /opt/backtrace/bin/ptrace
+// Tracer path: /opt/backtrace/bin/ptrace.
+//
+// Output directory: Current working directory of process.
 //
 // Signal set: ABRT, FPE, SEGV, ILL, BUS. Note: Go converts BUS, FPE, and
 // SEGV arising from process execution into run-time panics, which cannot be
-// handled by signal handlers. These signals are caught went sent from
+// handled by signal handlers. These signals are caught when sent from
 // os.Process.Kill or similar.
-//
-// System goroutines (i.e. those started and used by the Go runtime) are
-// excluded unless the includeSystemGs parameter is true.
 //
 // The default logger prints to stderr.
 //
@@ -109,9 +116,9 @@ func (d *defaultLogger) SetLogLevel(level LogPriority) {
 // ErrClassification: true
 //
 // Timeout: 120s
-func New(includeSystemGs bool) *BTTracer {
+func New(options NewOptions) *BTTracer {
 	moduleOpt := "--module=go:enable,true"
-	if !includeSystemGs {
+	if !options.IncludeSystemGs {
 		moduleOpt += ",filter,user"
 	}
 
@@ -146,9 +153,13 @@ const (
 )
 
 type PutOptions struct {
-	// Set to true if tracer remnants (i.e. generated snapshot files)
-	// should be unlinked from the filesystem after successful puts.
+	// If set to true, tracer remnants (i.e. generated snapshot files)
+	// will be unlinked from the filesystem after successful puts.
 	Unlink bool
+
+	// The http.Client to use for uploading. The default will be used
+	// if left unspecified.
+	Client http.Client
 }
 
 // Enables uploading of the generated snapshot file to a remote Backtrace
@@ -233,7 +244,7 @@ func (t *BTTracer) Put(snapshot []byte) error {
 	// The file is automatically closed by the Post request after
 	// completion.
 
-	resp, err := t.put.client.Post(
+	resp, err := t.put.options.Client.Post(
 		t.put.endpoint,
 		"application/octet-stream",
 		body)
@@ -272,6 +283,29 @@ func (t *BTTracer) SetTracerPath(path string) {
 	defer t.m.Unlock()
 
 	t.cmd = path
+}
+
+// Sets the output path for generated snapshots. The directory will be
+// created with the specified permission bits if it does not already
+// exist.
+//
+// If perm is 0, a default of 0755 will be used.
+func (t *BTTracer) SetOutputPath(path string, perm os.FileMode) error {
+	if perm == 0 {
+		perm = 0755
+	}
+
+	if err := os.MkdirAll(path, perm); err != nil {
+		t.Logf(LogError, "Failed to create output directory: %v\n", err)
+		return err
+	}
+
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	t.outputDir = path
+
+	return nil
 }
 
 // Sets the input and output pipes for the tracer.
@@ -350,6 +384,7 @@ func (t *BTTracer) Finalize(options []string) *exec.Cmd {
 	defer t.m.RUnlock()
 
 	tracer := exec.Command(t.cmd, options...)
+	tracer.Dir = t.outputDir
 	tracer.Stdin = t.p.stdin
 	tracer.Stderr = t.p.stderr
 

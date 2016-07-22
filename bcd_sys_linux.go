@@ -18,5 +18,6 @@ func EnableTracing() error {
 	// systems, so we need to store it in a separate variable to bypass
 	// Go's const conversion restrictions.
 	flag := sys.PR_SET_PTRACER_ANY
+
 	return sys.Prctl(sys.PR_SET_PTRACER, uintptr(flag), 0, 0, 0)
 }

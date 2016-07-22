@@ -163,16 +163,19 @@ func start() {
 
 func main() {
 	if err := bcd.EnableTracing(); err != nil {
-		fmt.Println("Failed to enable tracing:", err)
-		panic(err)
+		fmt.Printf("Warning: failed to enable tracing: %v\n", err)
 	}
 
 	// Use the default tracer implementation.
-	// false: Exclude system goroutines.
-	tracer = bcd.New(false)
+	tracer = bcd.New(bcd.NewOptions{IncludeSystemGs: false})
 
 	// Enable WARNING log output from the tracer.
 	tracer.AddOptions(nil, "-L", "WARNING")
+
+	if err := tracer.SetOutputPath("/home/a/path/that/is/fake", 0755); err != nil {
+		fmt.Printf("Warning: failed to set output path: %v.\n" +
+			"Generated snapshots will be stored in cwd.\n", err)
+	}
 
 	tracer.AddKV(nil, "version", "1.2.3")
 
@@ -188,8 +191,8 @@ func main() {
 
 	tracer.SetLogLevel(bcd.LogMax)
 
-	if err := tracer.EnablePut("fakeserver",
-		"faketoken",
+	if err := tracer.EnablePut("https://fakeserver.fakecompany.com:6098",
+		"fakeprojecttoken",
 		bcd.PutOptions{Unlink: true}); err != nil {
 		fmt.Printf("Failed to enable put: %v\n", err)
 	}
