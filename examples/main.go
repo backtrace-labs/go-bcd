@@ -184,7 +184,7 @@ func main() {
 	// Enable WARNING log output from the tracer.
 	tracer.AddOptions(nil, "-L", "WARNING")
 
-	if err := tracer.SetOutputPath("/home/a/path/that/is/fake", 0755); err != nil {
+	if err := tracer.SetOutputPath("./tracedir", 0755); err != nil {
 		fmt.Printf("Warning: failed to set output path: %v.\n" +
 			"Generated snapshots will be stored in cwd.\n", err)
 	}
