@@ -240,6 +240,7 @@ func (t *BTTracer) Put(snapshot []byte) error {
 	if err != nil {
 		return err
 	}
+	defer body.Close()
 
 	// The file is automatically closed by the Post request after
 	// completion.
