@@ -226,7 +226,7 @@ func main() {
 		if err := tracer.PutDir("./tracedir"); err != nil {
 			fmt.Printf("Failed to Put from directory: %v\n", err)
 		}
-	}
+	}()
 
 	// Register for signal handling using the tracer's default signal set.
 	bcd.Register(tracer)

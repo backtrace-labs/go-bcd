@@ -4,3 +4,6 @@
 *.btt                                                                           
 *.kdev4
 examples/main
+examples/examples
+examples/tracelog
+examples/tracedir/*
