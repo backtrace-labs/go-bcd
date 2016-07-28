@@ -170,6 +170,11 @@ type PutOptions struct {
 // Configures the uploading of a generated snapshot file to a remote Backtrace
 // coronerd object store.
 //
+// Uploads use simple one-shot semantics and won't retry on failures. For
+// more robust snapshot uploading and directory monitoring, consider using
+// coroner daemon, as described at
+// https://documentation.backtrace.io/snapshot/#daemon.
+//
 // endpoint: The URL of the server. It must be a valid HTTP endpoint as
 // according to url.Parse() (which is based on RFC 3986). The default scheme
 // and port are https and 6098, respectively, and are used if left unspecified.
