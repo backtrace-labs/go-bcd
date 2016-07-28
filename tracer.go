@@ -243,9 +243,10 @@ func (t *BTTracer) Put(snapshot []byte) error {
 }
 
 // Synchronously uploads snapshots contained in the specified directory.
-// It is safe to spawn a goroutine to run PutDir.
+// It is safe to spawn a goroutine to run BTTracer.PutDir().
 //
-// ConfigurePut should have returned successfully before calling PutDir.
+// ConfigurePut should have returned successfully before calling
+// BTTracer.PutDir().
 //
 // Only files with the '.btt' suffix will be uploaded.
 //

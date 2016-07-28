@@ -36,6 +36,7 @@ type globalState struct {
 type GlobalConfig struct {
 	// If the tracer's timeout expires and the tracer cannot be killed,
 	// generate a run-time panic.
+	//
 	// Defaults to true.
 	PanicOnKillFailure bool
 
@@ -44,17 +45,21 @@ type GlobalConfig struct {
 	// listening for the signal.
 	// Note: this will call signal.Reset(signal) on the received signal,
 	// which undoes the effect of any signal.Notify() calls for the signal.
+	//
 	// Defaults to true.
 	ResendSignal bool
 
 	// Length of time to wait after completion of a tracer's
 	// execution before allowing the next tracer to run.
+	//
 	// Defaults to 3 seconds.
 	RateLimit time.Duration
 
-	// Wait for the Tracer to finish uploading its results (instead of
+	// If bcd.Trace() has been configured to attempt an upload immediately,
+	// wait for the Tracer to finish uploading its results (instead of
 	// asynchronously uploading in a new goroutine) before returning
 	// from bcd.Trace().
+	//
 	// Defaults to true.
 	SynchronousPut bool
 }
@@ -82,6 +87,15 @@ func UpdateConfig(c GlobalConfig) {
 }
 
 // A generic out-of-process tracer interface.
+//
+// This is used primarily by the top-level functions of the bcd package,
+// like bcd.Trace, to handle execution and synchronization of various
+// generic tracers.
+//
+// Tracers are not limited to this interface and may provide additional
+// utility methods; see specific tracer implementation (e.g. BTTracer)
+// documentation for details.
+//
 // The methods in this interface are expected to be goroutine safe; multiple
 // trace requests (which ultimately call into these methods) from different
 // goroutines may run concurrently.
@@ -144,7 +158,7 @@ type Tracer interface {
 	// String representation of a Tracer.
 	fmt.Stringer
 
-	// Returns whether the tracer should upload its results to a remote
+	// Returns whether the Tracer should upload its results to a remote
 	// server after successful tracer execution.
 	PutOnTrace() bool
 
