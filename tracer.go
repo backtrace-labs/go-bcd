@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -153,16 +154,20 @@ const (
 )
 
 type PutOptions struct {
-	// If set to true, tracer remnants (i.e. generated snapshot files)
+	// If set to true, tracer results (i.e. generated snapshot files)
 	// will be unlinked from the filesystem after successful puts.
 	Unlink bool
 
 	// The http.Client to use for uploading. The default will be used
 	// if left unspecified.
 	Client http.Client
+
+	// If set to true, tracer results will be uploaded after each
+	// successful Trace request.
+	OnTrace bool
 }
 
-// Enables uploading of the generated snapshot file to a remote Backtrace
+// Configures the uploading of a generated snapshot file to a remote Backtrace
 // coronerd object store.
 //
 // endpoint: The URL of the server. It must be a valid HTTP endpoint as
@@ -176,7 +181,7 @@ type PutOptions struct {
 //
 // options: Modifies behavior of the Put action; see PutOptions documentation
 // for more details.
-func (t *BTTracer) EnablePut(endpoint, token string, options PutOptions) error {
+func (t *BTTracer) ConfigurePut(endpoint, token string, options PutOptions) error {
 	if endpoint == "" || token == "" {
 		return errors.New("Endpoint must be non-empty")
 	}
@@ -221,9 +226,9 @@ func (t *BTTracer) EnablePut(endpoint, token string, options PutOptions) error {
 	return nil
 }
 
-// See bcd.Tracer.PutEnabled().
-func (t *BTTracer) PutEnabled() bool {
-	return t.put.endpoint != ""
+// See bcd.Tracer.PutOnTrace().
+func (t *BTTracer) PutOnTrace() bool {
+	return t.put.options.OnTrace
 }
 
 // See bcd.Tracer.Put().
@@ -234,6 +239,46 @@ func (t *BTTracer) Put(snapshot []byte) error {
 	}
 	path := strings.TrimSpace(string(snapshot[:end]))
 
+	return t.putSnapshotFile(path)
+}
+
+// Synchronously uploads snapshots contained in the specified directory.
+// It is safe to spawn a goroutine to run PutDir.
+//
+// ConfigurePut should have returned successfully before calling PutDir.
+//
+// Only files with the '.btt' suffix will be uploaded.
+//
+// The first error encountered terminates the directory walk, thus
+// skipping snapshots which would have been processed later in the walk.
+func (t *BTTracer) PutDir(path string) error {
+	t.Logf(LogDebug, "Uploading snapshots from %s...\n", path)
+	return filepath.Walk(path, putDirWalk(t))
+}
+
+func putDirWalk(t *BTTracer) filepath.WalkFunc {
+	return func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			t.Logf(LogError, "Failed to walk put directory: %v\n",
+				err)
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if !strings.HasSuffix(info.Name(), ".btt") {
+			t.Logf(LogDebug, "Ignoring file %s: suffix '.btt' " +
+				"is required\n", info.Name())
+			return nil
+		}
+
+		return t.putSnapshotFile(path)
+	}
+}
+
+func (t *BTTracer) putSnapshotFile(path string) error {
 	t.Logf(LogDebug, "Attempting to upload snapshot %s...\n", path)
 
 	body, err := os.Open(path)

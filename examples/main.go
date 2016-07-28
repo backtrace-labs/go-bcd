@@ -135,7 +135,7 @@ func recurse(depth int, s1 fishface) {
 
 			if x >= 1000 {
 				rf, err := os.OpenFile(
-					"/home/djoseph/rdonlyfile",
+					"/home/someone/rdonlyfile",
 					os.O_RDWR, 0644)
 
 				if err != nil {
@@ -151,6 +151,7 @@ func recurse(depth int, s1 fishface) {
 				fmt.Println("Writing to rf")
 				rf.WriteString("File opened\n")
 				rf.Sync()
+				rf.Close()
 			}
 		}
 
@@ -168,8 +169,13 @@ func start() {
 }
 
 func main() {
+	// On kernels with specific security settings enabled, this call
+	// allows a non-parent tracer to run against this process.
+	// It is not necessary to call this in the absence of these security
+	// settings.
 	if err := bcd.EnableTracing(); err != nil {
-		fmt.Printf("Warning: failed to enable tracing: %v\n", err)
+		fmt.Printf("Warning: failed to enable tracing permission: %v\n",
+			err)
 	}
 
 	bcd.UpdateConfig(bcd.GlobalConfig{
@@ -193,7 +199,7 @@ func main() {
 
 	// Tracer I/O is directed to os.DevNull by default.
 	// Note: this does not affect the generated output file (unless the
-	// tracer can only print to stdout/err).
+	// tracer can only print to stderr).
 	f, err := os.Create("./tracelog")
 	if err != nil {
 		panic(err)
@@ -203,10 +209,23 @@ func main() {
 
 	tracer.SetLogLevel(bcd.LogMax)
 
-	if err := tracer.EnablePut("https://fakeserver.fakecompany.com:6098",
+	if err := tracer.ConfigurePut("https://fakeserver.fakecompany.com:6098",
 		"fakeprojecttoken",
-		bcd.PutOptions{Unlink: true}); err != nil {
+		bcd.PutOptions{Unlink: true, OnTrace: true}); err != nil {
 		fmt.Printf("Failed to enable put: %v\n", err)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// Uploads all snapshots contained in the specified directory.
+		//
+		// Generally, one should use either BTTracer.PutDir or set the
+		// OnTrace option to true when calling BTTracer.ConfigurePut.
+		if err := tracer.PutDir("./tracedir"); err != nil {
+			fmt.Printf("Failed to Put from directory: %v\n", err)
+		}
 	}
 
 	// Register for signal handling using the tracer's default signal set.

@@ -146,10 +146,14 @@ type Tracer interface {
 
 	// Returns whether the tracer should upload its results to a remote
 	// server after successful tracer execution.
-	PutEnabled() bool
+	PutOnTrace() bool
 
 	// Uploads Tracer results given by the snapshot argument, which is
 	// the stdout of the Tracer process, to the configured remote server.
+	//
+	// As this is part of the generic Tracer interface, callers know
+	// nothing about the contents of the output; thus, it is passed
+	// unfiltered to the specific underlying implementation.
 	Put(snapshot []byte) error
 }
 
@@ -297,17 +301,6 @@ func Register(t TracerSig) {
 	return
 }
 
-func unregisterInternal(t TracerSig, c chan os.Signal) {
-	t.Logf(LogDebug, "Stopping signal channel...\n")
-	signal.Stop(c)
-
-	t.Logf(LogDebug, "Closing signal channel...\n")
-	close(c)
-
-	t.SetSigchan(nil)
-	t.Logf(LogDebug, "Tracer unregistered\n")
-}
-
 // Stops the specified TracerSig from handling any signals it was previously
 // registered to handle via bcd.Register().
 func Unregister(t TracerSig) {
@@ -319,11 +312,15 @@ func Unregister(t TracerSig) {
 	unregisterInternal(t, c)
 }
 
-func traceUnlockRL(t Tracer, rl time.Duration) {
-	t.Logf(LogDebug, "Waiting for ratelimit (%v)\n", rl)
-	<-time.After(rl)
-	t.Logf(LogDebug, "Unlocking traceLock\n")
-	traceLock <- struct{}{}
+func unregisterInternal(t TracerSig, c chan os.Signal) {
+	t.Logf(LogDebug, "Stopping signal channel...\n")
+	signal.Stop(c)
+
+	t.Logf(LogDebug, "Closing signal channel...\n")
+	close(c)
+
+	t.SetSigchan(nil)
+	t.Logf(LogDebug, "Tracer unregistered\n")
 }
 
 type tracerResult struct {
@@ -420,6 +417,7 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 	case <-timeout:
 		err = errors.New("Tracer lock acquisition timed out")
 		t.Logf(LogError, "%v\n", err)
+
 		return
 	case <-traceLock:
 		break
@@ -487,10 +485,13 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 		t.Logf(LogError, "Tracer failed to run: %v\n",
 			res.err)
 		err = res.err
+
 		return
 	}
 
-	if t.PutEnabled() == false {
+	if t.PutOnTrace() == false {
+		t.Logf(LogDebug, "Trace request complete\n")
+
 		return
 	}
 
@@ -530,6 +531,13 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 	t.Logf(LogDebug, "Trace request complete\n")
 
 	return
+}
+
+func traceUnlockRL(t Tracer, rl time.Duration) {
+	t.Logf(LogDebug, "Waiting for ratelimit (%v)\n", rl)
+	<-time.After(rl)
+	t.Logf(LogDebug, "Unlocking traceLock\n")
+	traceLock <- struct{}{}
 }
 
 // Create a unique error type to use during panic recovery.

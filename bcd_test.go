@@ -75,7 +75,7 @@ func (t *TestTracer) Put(snapshot []byte) error {
 	return nil
 }
 
-func (t *TestTracer) PutEnabled() bool {
+func (t *TestTracer) PutOnTrace() bool {
 	return false
 }
 
