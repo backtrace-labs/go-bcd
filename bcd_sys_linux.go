@@ -1,3 +1,5 @@
+// +build !arm
+
 package bcd
 
 import (
