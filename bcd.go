@@ -15,6 +15,8 @@ import (
 	"os/signal"
 	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -130,6 +132,12 @@ type Tracer interface {
 	// See AddOptions for rules regarding the specified options slice and
 	// the return value.
 	AddFaultedThread(options []string, tid int) []string
+
+	// Add a caller goroutine option using the specified goid.
+	//
+	// See AddOptions for rules regarding the specified options slice and
+	// the return value.
+	AddCallerGo(options []string, goid int) []string
 
 	// Add a classification to the generated snapshot.
 	//
@@ -407,6 +415,17 @@ func Trace(t Tracer, e error, traceOptions *TraceOptions) (err error) {
 		} else {
 			t.Logf(LogWarning, "Failed to retrieve tid: %v\n", err)
 		}
+	}
+
+	// Report caller's goid
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	if goid, err := strconv.Atoi(idField); err == nil {
+		t.Logf(LogDebug, "Retrieved goid: %v\n", goid)
+		options = t.AddCallerGo(options, goid)
+	} else {
+		t.Logf(LogWarning, "Failed to retrieve goid: %v\n", err)
 	}
 
 	if e != nil {

@@ -389,6 +389,30 @@ func (t *BTTracer) AddOptions(options []string, v ...string) []string {
 	return nil
 }
 
+// Append to an option with given prefix
+func AppendOptionWithPrefix(options []string, prefix string, v string) []string {
+	for i, opt := range options {
+		if strings.HasPrefix(opt, prefix) == true {
+			new_opt := opt + "," + v
+			options[i] = new_opt
+			return options
+		}
+	}
+	return append(options, prefix + v)
+}
+
+func (t *BTTracer) AppendOptionWithPrefix(options []string, prefix string, v string) []string {
+	if options != nil {
+		return AppendOptionWithPrefix(options, prefix, v)
+	}
+
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	t.options = AppendOptionWithPrefix(t.options, prefix, v)
+	return nil
+}
+
 // See bcd.Tracer.AddKV().
 func (t *BTTracer) AddKV(options []string, key, val string) []string {
 	return t.AddOptions(options, t.kvp, key+t.kvd+val)
@@ -402,6 +426,12 @@ func (t *BTTracer) AddThreadFilter(options []string, tid int) []string {
 // See bcd.Tracer.AddFaultedThread().
 func (t *BTTracer) AddFaultedThread(options []string, tid int) []string {
 	return t.AddOptions(options, "--fault-thread", strconv.Itoa(tid))
+}
+
+// See bcd.Tracer.AddCallerGo().
+func (t *BTTracer) AddCallerGo(options []string, goid int) []string {
+	moduleOpt := "goid," + strconv.Itoa(goid)
+	return t.AppendOptionWithPrefix(options, "--module=go:", moduleOpt)
 }
 
 // See bcd.Tracer.AddClassifier().
