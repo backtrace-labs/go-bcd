@@ -16,10 +16,5 @@ func gettid() (int, error) {
 //
 // This is a Linux-specific utility function.
 func EnableTracing() error {
-	// PR_SET_PTRACER_ANY may be a negative integer constant on some
-	// systems, so we need to store it in a separate variable to bypass
-	// Go's const conversion restrictions.
-	flag := sys.PR_SET_PTRACER_ANY
-
-	return sys.Prctl(sys.PR_SET_PTRACER, uintptr(flag), 0, 0, 0)
+	return sys.Prctl(sys.PR_SET_PTRACER, sys.PR_SET_PTRACER_ANY, 0, 0, 0)
 }
